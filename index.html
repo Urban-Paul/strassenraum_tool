@@ -74,6 +74,7 @@ body[data-stage="0"] #work,body[data-stage="0"] #ev{display:none}body[data-stage
 <div class="tg"><span>Fläche</span><button id="wStart">Fläche anklicken</button><button id="zStart">Fläche einzeichnen</button><button id="zDone">Abschließen</button><button id="zUndo">Letzte löschen</button><button id="zClr">Alle löschen</button></div>
 <p class="mu" id="zinfo"></p><p class="mu">Typ wählen, „Fläche anklicken“ drücken, in den Plan klicken. Alles Zusammenhängende in ähnlicher Farbe bekommt den Typ.</p></div>
 <div class="panel" id="p3" hidden><p class="mu"><b>Blau = zählt als Straße</b> (Fahrbahn und Gehsteige). Innenhöfe, Gebäude und Privatgrün zählen nicht.</p>
+<div class="tg"><label class="mu"><input type="checkbox" id="txo" checked> Text, Titel und Legenden ausschließen <span style="color:#d63c3c">(rot)</span></label></div>
 <div class="tg"><span>Korrigieren</span><button id="sAdd">+ Zur Straße hinzufügen</button><button id="sDel">− Aus Straße entfernen</button><button id="sUndo">Rückgängig</button><button id="sClr">Automatik wiederherstellen</button></div>
 <p class="mu">Klick in eine Fläche (z. B. Innenhof) fügt sie hinzu oder entfernt sie. Ziehen malt mit dem Pinsel.</p>
 <details><summary>Straßenfläche als Polygon umranden</summary><div class="tg"><button id="aStart">Polygon zeichnen</button><button id="aDone">Abschließen</button><button id="aClr">Polygon löschen</button></div><p class="mu">Eckpunkte anklicken und abschließen. Das Polygon ersetzt die Automatik.</p></details></div>
@@ -110,7 +111,7 @@ const $=s=>document.querySelector(s);
 const CAT=[["v","Versiegelt"],["s","Büsche / Beete"],["r","Rasen / Wiese"],["u","Sonstiges (Boden, übrige Flächen)"],["b","Baumkrone (nur ohne Kronenplan)"],["h","Außerhalb Straßenraum (Hintergrund, Gebäude, Privatgrund)"]];
 const ZT=[null,"v","s","r","u","h","k","w"],ZC={v:1,s:2,r:3,u:4,h:5,k:6,w:7},ZCOL={v:"#6b7078",s:"#0a7a30",r:"#7fcf5a",u:"#8a6a46",h:"#c0392b",k:"#222222",w:"#d4a017"};
 const im={b:null,k:null};
-let bx=null,hov=null,stE=[],stV=0,stC=null,stTab=false,stk=null,SMASK=null,CMASK=null,OUT=null,PH=false,PS=false,PL=false,rb=null,autoA=null,LAST=null,BASE=null,pal=[],D=null,W=0,H=0,crown=null,idx=null,cnt=[],un=0,pick=false,N=24,view=null,circ=[],sel=null,tmp=null,drag=null,ds=null,ed=null,areas=[],zones=[],cur=[],curT="area",am=null,zm=null,bmask=null,cntB=0,cntR=0,vc=null,FT=null;
+let TXM=null,bx=null,hov=null,stE=[],stV=0,stC=null,stTab=false,stk=null,SMASK=null,CMASK=null,OUT=null,PH=false,PS=false,PL=false,rb=null,autoA=null,LAST=null,BASE=null,pal=[],D=null,W=0,H=0,crown=null,idx=null,cnt=[],un=0,pick=false,N=24,view=null,circ=[],sel=null,tmp=null,drag=null,ds=null,ed=null,areas=[],zones=[],cur=[],curT="area",am=null,zm=null,bmask=null,cntB=0,cntR=0,vc=null,FT=null;
 const dist=(a,b)=>Math.hypot(a[0]-b[0],a[1]-b[1],a[2]-b[2]);
 const catOf=k=>k>=0?pal[k].cat:k===-3?"b":k===-4?"r":k===-1?"u":null;
 function morph(m,dil){const t=new Uint8Array(m.length),o=new Uint8Array(m.length);for(let y=0;y<H;y++)for(let x=0;x<W;x++){const p=y*W+x;let v=m[p];if(dil){if(x>0&&m[p-1]||x<W-1&&m[p+1])v=1}else if(x>0&&!m[p-1]||x<W-1&&!m[p+1])v=0;t[p]=v}
@@ -119,6 +120,32 @@ function closeM(m){let a=m;for(let i=0;i<2;i++)a=morph(a,1);for(let i=0;i<2;i++)
 function openM(m){let a=m;for(let i=0;i<2;i++)a=morph(a,0);for(let i=0;i<2;i++)a=morph(a,1);m.set(a)}
 function rast(L){const m=new Uint8Array(W*H);L.forEach(a=>{let x0=W,x1=0,y0=H,y1=0;a.forEach(q=>{x0=Math.min(x0,q[0]);x1=Math.max(x1,q[0]);y0=Math.min(y0,q[1]);y1=Math.max(y1,q[1])});for(let y=Math.max(0,Math.floor(y0));y<=Math.min(H-1,Math.ceil(y1));y++)for(let x=Math.max(0,Math.floor(x0));x<=Math.min(W-1,Math.ceil(x1));x++){let ins=false;for(let i=0,j=a.length-1;i<a.length;j=i++){const[xi,yi]=a[i],[xj,yj]=a[j];if((yi>y)!==(yj>y)&&x<(xj-xi)*(y-yi)/(yj-yi)+xi)ins=!ins}if(ins)m[y*W+x]=1}});return m}
 
+/* ---------- Textbereiche (Titel, Legende, Beschreibung) automatisch erkennen ---------- */
+function mrect(a,kx,ky,mx){const o=new Float32Array(W*H),t=new Float32Array(W*H),rx=kx>>1,ry=ky>>1;
+for(let y=0;y<H;y++)for(let x=0;x<W;x++){let v=mx?-1e9:1e9;for(let i=Math.max(0,x-rx);i<=Math.min(W-1,x+rx);i++){const q=a[y*W+i];v=mx?(q>v?q:v):(q<v?q:v)}t[y*W+x]=v}
+for(let y=0;y<H;y++)for(let x=0;x<W;x++){let v=mx?-1e9:1e9;for(let i=Math.max(0,y-ry);i<=Math.min(H-1,y+ry);i++){const q=t[i*W+x];v=mx?(q>v?q:v):(q<v?q:v)}o[y*W+x]=v}return o}
+function lbl8(m){const n=W*H,lab=new Int32Array(n),st=new Int32Array(n),B=[null];let L=0;
+for(let p0=0;p0<n;p0++){if(!m[p0]||lab[p0])continue;L++;let sp=0,x0=W,x1=0,y0=H,y1=0,a=0,sx=0,sy=0;st[sp++]=p0;lab[p0]=L;
+while(sp){const p=st[--sp],x=p%W,y=(p-x)/W;a++;sx+=x;sy+=y;if(x<x0)x0=x;if(x>x1)x1=x;if(y<y0)y0=y;if(y>y1)y1=y;
+for(let dy=-1;dy<=1;dy++){const yy=y+dy;if(yy<0||yy>=H)continue;for(let dx=-1;dx<=1;dx++){const xx=x+dx;if(xx<0||xx>=W)continue;const q=yy*W+xx;if(m[q]&&!lab[q]){lab[q]=L;st[sp++]=q}}}}
+B.push({x:x0,y:y0,w:x1-x0+1,h:y1-y0+1,a,cx:sx/a,cy:sy/a})}return[lab,B]}
+function findText(){const n=W*H,M=Math.max(W,H),g=new Float32Array(n);for(let p=0;p<n;p++)g[p]=.299*D[p*4]+.587*D[p*4+1]+.114*D[p*4+2];
+const k=Math.max(5,Math.floor(.007*M))|1,cl=mrect(mrect(g,k,k,true),k,k,false),ink=new Uint8Array(n);for(let p=0;p<n;p++)if(D[p*4+3]>=20&&(cl[p]-g[p]>38||g[p]<110))ink[p]=1;
+const[lab,B]=lbl8(ink),ok=new Uint8Array(B.length),gl=new Float32Array(n);
+for(let i=1;i<B.length;i++){const b=B[i];if(b.h>=2&&b.h<=.045*M&&b.w<=.05*M&&b.a>=3)ok[i]=1}
+for(let p=0;p<n;p++)if(ok[lab[p]])gl[p]=1;
+const kw=Math.max(5,Math.floor(.011*M)),ln=mrect(mrect(gl,kw,3,true),kw,3,false),lm=new Uint8Array(n);for(let p=0;p<n;p++)if(ln[p]>.5)lm[p]=1;
+const[l2,B2]=lbl8(lm),cnt=new Int32Array(B2.length);for(let i=1;i<B.length;i++)if(ok[i]){const q=l2[Math.round(B[i].cy)*W+Math.round(B[i].cx)];if(q)cnt[q]++}
+const out=new Uint8Array(n);
+for(let i=1;i<B2.length;i++){const b=B2[i],{x,y,w,h}=b;if(h<3||w<.03*M||w*h>.35*n||cnt[i]<3)continue;
+let gp=0,rmax=0;for(let yy=y;yy<y+h;yy++){let r=0;for(let xx=x;xx<x+w;xx++){const p=yy*W+xx;if(l2[p]===i&&gl[p])r++}gp+=r;if(r/w>rmax)rmax=r/w}
+const fill=gp/b.a,solid=b.a/(w*h);if(fill<.15||fill>.85||solid<.4)continue;if(h>=8&&rmax<.08)continue;
+const pd=Math.floor(Math.max(4,.5*Math.min(h,.03*M))),y0=Math.max(0,y-pd),y1=Math.min(H,y+h+pd),x0=Math.max(0,x-pd),x1=Math.min(W,x+w+pd),hs=new Int32Array(256);let tot=0;
+for(let yy=y0;yy<y1;yy++)for(let xx=x0;xx<x1;xx++){const p=yy*W+xx;if(!ink[p]){hs[Math.max(0,Math.min(255,Math.round(g[p])))]++;tot++}}
+if(tot<20)continue;let c=0,med=0,p10=0,gm=false,g10=false;for(let v=0;v<256;v++){c+=hs[v];if(!g10&&c>=.1*tot){p10=v;g10=true}if(!gm&&c>=.5*tot){med=v;gm=true}}
+if(med<225||p10<185)continue;
+for(let yy=y;yy<y+h;yy++)for(let xx=x;xx<x+w;xx++)out[yy*W+xx]=1}
+const of=new Float32Array(n);for(let p=0;p<n;p++)of[p]=out[p];const cm2=mrect(mrect(of,Math.floor(.012*M)|1,Math.floor(.03*M)|1,true),Math.floor(.012*M)|1,Math.floor(.03*M)|1,false),r=new Uint8Array(n);for(let p=0;p<n;p++)if(cm2[p]>.5)r[p]=1;return morph(r,1)}
 /* ---------- Umrandung (weiß) als Straßenfläche ---------- */
 function findOutline(){const n=W*H,wm=new Uint8Array(n);for(let p=0,i=0;p<n;p++,i+=4)if(D[i+3]>=20&&Math.min(D[i],D[i+1],D[i+2])>=236)wm[p]=1;
 const lab=new Int32Array(n),st=new Int32Array(n);let best=0,bl=0,bt=0,L=0;for(let p0=0;p0<n;p0++){if(!wm[p0]||lab[p0])continue;L++;let sp=0,cnt=0,tb=0;st[sp++]=p0;lab[p0]=L;while(sp){const p=st[--sp];cnt++;const x=p%W,y=(p-x)/W;if(x===0||y===0||x===W-1||y===H-1)tb=1;if(x>0&&wm[p-1]&&!lab[p-1]){lab[p-1]=L;st[sp++]=p-1}if(x<W-1&&wm[p+1]&&!lab[p+1]){lab[p+1]=L;st[sp++]=p+1}if(y>0&&wm[p-W]&&!lab[p-W]){lab[p-W]=L;st[sp++]=p-W}if(y<H-1&&wm[p+W]&&!lab[p+W]){lab[p+W]=L;st[sp++]=p+W}}if(cnt>best){best=cnt;bl=L;bt=tb}}
@@ -171,7 +198,7 @@ function topColors(n){const m=new Map();for(let i=0;i<D.length;i+=4){if(D[i+3]<2
 function addColors(list){list.forEach(c=>{if(!pal.some(p=>dist(p.c,c)<14))pal.push({c,cat:guess(c)})})}
 function load(id,key){$(id).onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{const i=new Image();i.onerror=()=>{$("#out").textContent="Datei konnte nicht gelesen werden. Bitte PNG oder JPG verwenden."};i.onload=()=>{try{im[key]=i;if(key==="b")init();else prepCrown();recompute();runDet()}catch(e){$("#out").textContent="Fehler: "+e.message}};i.src=r.result};r.readAsDataURL(f)}}
 load("#fb","b");load("#fk","k");
-function init(){const s=Math.min(1,1200/Math.max(im.b.width,im.b.height));W=Math.round(im.b.width*s);H=Math.round(im.b.height*s);D=px(im.b,W,H);const c=$("#cv");c.width=W;c.height=H;c.style.display="block";$("#ov").style.display="block";view=null;bx=null;areas=[];zones=[];cur=[];am=null;zm=null;bmask=null;circ=[];sel=null;autoA=null;stE=[];stV++;stC=null;features();classify();pal=[];N=24;addColors(topColors(N));prepCrown();document.body.dataset.stage=document.body.dataset.stage==="2"?"2":"1";if(window.birdPlan)birdPlan();try{autoA=PH?findOutline():null}catch(e){autoA=null}buildArea();setTool("#mSel");$("#zinfo").textContent=autoA?"Weiße Umrandung als Straßenfläche übernommen. Unter „Straßenfläche“ zurücksetzen oder eigene Fläche zeichnen.":""}
+function init(){const s=Math.min(1,1200/Math.max(im.b.width,im.b.height));W=Math.round(im.b.width*s);H=Math.round(im.b.height*s);D=px(im.b,W,H);const c=$("#cv");c.width=W;c.height=H;c.style.display="block";$("#ov").style.display="block";view=null;bx=null;areas=[];zones=[];cur=[];am=null;zm=null;bmask=null;circ=[];sel=null;autoA=null;stE=[];stV++;stC=null;TXM=null;try{TXM=findText()}catch(e){TXM=null}features();classify();pal=[];N=24;addColors(topColors(N));prepCrown();document.body.dataset.stage=document.body.dataset.stage==="2"?"2":"1";if(window.birdPlan)birdPlan();try{autoA=PH?findOutline():null}catch(e){autoA=null}buildArea();setTool("#mSel");$("#zinfo").textContent=autoA?"Weiße Umrandung als Straßenfläche übernommen. Unter „Straßenfläche“ zurücksetzen oder eigene Fläche zeichnen.":""}
 function prepCrown(){crown=null;if(!im.k||!W)return;const e=px(im.k,W,H);crown=new Uint8Array(W*H);for(let i=0,p=0;i<e.length;i+=4,p++)crown[p]=e[i+3]>=20&&Math.min(e[i],e[i+1],e[i+2])<=235?1:0}
 function recompute(){if(!D)return;const t=+$("#tol").value,t2=t*t,ch=new Map();idx=new Int16Array(W*H);cnt=pal.map(()=>0);un=0;cntB=0;cntR=0;
 for(let i=0,p=0;i<D.length;i+=4,p++){if(D[i+3]<20){idx[p]=-2;continue}let k;if(vc[p]){k=-2-vc[p]}else{const r=D[i],g=D[i+1],b=D[i+2],key=(r>>2)<<12|(g>>2)<<6|(b>>2);k=ch.get(key);if(k===undefined){k=-1;let bd=t2;for(let j=0;j<pal.length;j++){const c=pal[j].c,e=(r-c[0])**2+(g-c[1])**2+(b-c[2])**2;if(e<=bd){bd=e;k=j}}ch.set(key,k)}}idx[p]=k;if(k>=0)cnt[k]++;else if(k===-3)cntB++;else if(k===-4)cntR++;else un++}render()}
@@ -190,7 +217,7 @@ const m=Math.max(W,H),rmin=PL?1.4:Math.max(3,.004*m),rmax=.09*m,c=[];
 for(let y=1;y<H-1;y++)for(let x=1;x<W-1;x++){const p=y*W+x,v=d[p];if(v<rmin||v>rmax)continue;if(d[p-1]>v||d[p+1]>v||d[p-W]>v||d[p+W]>v||d[p-W-1]>v||d[p-W+1]>v||d[p+W-1]>v||d[p+W+1]>v)continue;c.push({x,y,r:v})}
 c.sort((a,b)=>b.r-a.r);c.length=Math.min(c.length,4000);const tp=c.slice(0,40).map(q=>q.r).sort((a,b)=>a-b),md=tp[tp.length>>1]||0,mn=Math.max(rmin,.3*md),ok=[];for(const q of c){if(q.r<mn)continue;if(ok.some(a=>{const d=Math.hypot(a.x-q.x,a.y-q.y);return d<.85*a.r||(q.r<.6*a.r&&d<a.r+.5*q.r)}))continue;ok.push({x:q.x,y:q.y,r:q.r+(PL?0:.5)})}circ=PH?ok.filter(c=>c.r>=.012*Math.max(W,H)):ok}
 const GCSS={v:"#4a6fa5",s:"#c2398a",r:"#6bbf3a",u:"#b5835a",b:"#0b6e3b",h:"#e07b20","-":"#d33333",street:"#2563eb"},GC=Object.fromEntries(Object.entries(GCSS).map(([k,v])=>[k,[parseInt(v.slice(1,3),16),parseInt(v.slice(3,5),16),parseInt(v.slice(5,7),16)]]));
-function draw(){if(!D)return;const c=$("#cv"),x=c.getContext("2d"),o=x.createImageData(W,H),d=o.data,gc=view?GC[view]:null;for(let i=0,p=0;i<D.length;i+=4,p++){let keep=true;if(view&&idx){if(view==="street")keep=!!(SMASK&&SMASK[p]);else if(view==="b"&&CMASK)keep=!!CMASK[p];else{const z=zm&&zm[p]?ZT[zm[p]]:catOf(idx[p]);keep=(z==="w"?"u":z==="k"?"v":z)===view}}d[i+3]=D[i+3];if(!view){d[i]=D[i];d[i+1]=D[i+1];d[i+2]=D[i+2];if(stTab&&SMASK&&SMASK[p]){d[i]=.78*D[i]+.22*37;d[i+1]=.78*D[i+1]+.22*99;d[i+2]=.78*D[i+2]+.22*235}}else if(keep){d[i]=.2*D[i]+.8*gc[0];d[i+1]=.2*D[i+1]+.8*gc[1];d[i+2]=.2*D[i+2]+.8*gc[2]}else{d[i]=.12*D[i]+224;d[i+1]=.12*D[i+1]+224;d[i+2]=.12*D[i+2]+224}}x.putImageData(o,0,0);drawOv()}
+function draw(){if(!D)return;const c=$("#cv"),x=c.getContext("2d"),o=x.createImageData(W,H),d=o.data,gc=view?GC[view]:null;for(let i=0,p=0;i<D.length;i+=4,p++){let keep=true;if(view&&idx){if(view==="street")keep=!!(SMASK&&SMASK[p]);else if(view==="b"&&CMASK)keep=!!CMASK[p];else{const z=zm&&zm[p]?ZT[zm[p]]:catOf(idx[p]);keep=(z==="w"?"u":z==="k"?"v":z)===view}}d[i+3]=D[i+3];if(!view){d[i]=D[i];d[i+1]=D[i+1];d[i+2]=D[i+2];if(stTab&&TXM&&TXM[p]&&$("#txo").checked){d[i]=.7*D[i]+.3*214;d[i+1]=.7*D[i+1]+.3*60;d[i+2]=.7*D[i+2]+.3*60}else if(stTab&&SMASK&&SMASK[p]){d[i]=.78*D[i]+.22*37;d[i+1]=.78*D[i+1]+.22*99;d[i+2]=.78*D[i+2]+.22*235}}else if(keep){d[i]=.2*D[i]+.8*gc[0];d[i+1]=.2*D[i+1]+.8*gc[1];d[i+2]=.2*D[i+2]+.8*gc[2]}else{d[i]=.12*D[i]+224;d[i+1]=.12*D[i+1]+224;d[i+2]=.12*D[i+2]+224}}x.putImageData(o,0,0);drawOv()}
 function drawOv(){if(!D)return;const c=$("#ov");if(c.width!==W)c.width=W;if(c.height!==H)c.height=H;const x=c.getContext("2d"),lw=Math.max(2,W/300);x.clearRect(0,0,W,H);
 const path=a=>{x.beginPath();a.forEach((q,i)=>i?x.lineTo(q[0],q[1]):x.moveTo(q[0],q[1]))};
 zones.forEach(z=>{if(z.w){if(z.cv)x.drawImage(z.cv,0,0);return}path(z.p);x.closePath();x.fillStyle=ZCOL[z.t]+"40";x.fill();x.setLineDash([]);x.strokeStyle=ZCOL[z.t];x.lineWidth=lw;x.stroke()});
@@ -235,7 +262,8 @@ const m=new Uint8Array(n);for(let p=0;p<n;p++)if(cand[s2.lab[p]])m[p]=1;
 const[l3,L3]=lblM(morphN(m,1,3)),a3=new Float64Array(L3+1);for(let p=0;p<n;p++)if(m[p])a3[l3[p]]++;
 for(let p=0;p<n;p++)if(m[p]&&a3[l3[p]]<.012*n)m[p]=0;
 return m}
-function stBase(){const n=W*H,m=new Uint8Array(n);
+function stBase(){const n=W*H,m=stBase0();if(TXM&&$("#txo").checked)for(let p=0;p<n;p++)if(TXM[p])m[p]=0;return m}
+function stBase0(){const n=W*H,m=new Uint8Array(n);
 if(PS||PL){const pk=stPlant();if(pk){const cm=new Uint8Array(n);for(let p=0;p<n;p++)if(catOf(idx[p])==="b")cm[p]=1;const ok=treesIn(cm,pk);for(let p=0;p<n;p++)if(ok[p])pk[p]=1;return pk}}
 if(!PS){for(let p=0;p<n;p++){const k=idx[p];if(k!==-2&&catOf(k)!=="h")m[p]=1}return m}
 const mx=Math.max(W,H),rr=Math.max(3,Math.round(.005*mx)),v=new Uint8Array(n),cm=new Uint8Array(n);
@@ -253,7 +281,7 @@ function summary(){if(!D||!idx)return;if(!areas.length){am=(PS||PL||stE.length)?
 if(bmask)for(let p=0;p<n;p++)if(bmask[p]&&!(bx&&bx[p]))cm[p]=1;if(crown)for(let p=0;p<n;p++)if(crown[p]&&!(bx&&bx[p]))cm[p]=1;
 circ.forEach(c=>{for(let y=Math.max(0,Math.floor(c.y-c.r));y<=Math.min(H-1,Math.ceil(c.y+c.r));y++)for(let x=Math.max(0,Math.floor(c.x-c.r));x<=Math.min(W-1,Math.ceil(c.x+c.r));x++)if((x-c.x)**2+(y-c.y)**2<=c.r*c.r){cm[y*W+x]=1;if(c.man)mm[y*W+x]=1}});
 const S={v:0,s:0,r:0,u:0,k:0,"-":0};let A=0,K=0,Kz=0,Kzs=0;const SM=new Uint8Array(n),CK=new Uint8Array(n),out=am?null:outCrowns(cm);OUT=out;
-for(let p=0;p<n;p++){if(am&&!am[p])continue;if(out&&out[p])continue;const k=idx[p];if(k===-2)continue;const zd=zm&&zm[p]>0;let cat=zd?ZT[zm[p]]:catOf(k);if(!zd&&cat==="h"&&am&&k>=0&&!pal[k].user)cat="v";if(cat==="h")continue;if(cat==="k"){S.k++;cat="v"}else if(cat==="w")cat="u";if(cat==="b"&&bx&&bx[p]&&!cm[p])cat="u";A++;SM[p]=1;const u=cm[p]||(cat==="b"&&!zd);if(u){K++;CK[p]=1;if(zd&&cat!=="b"&&!crown){S[cat]++;Kz++;if(cat==="s"||cat==="r")Kzs++}}if(u&&!crown)continue;S[cat==="b"||cat==="-"?"u":cat]++}
+const tx=TXM&&$("#txo").checked?TXM:null;for(let p=0;p<n;p++){if(am&&!am[p])continue;if(tx&&tx[p])continue;if(out&&out[p])continue;const k=idx[p];if(k===-2)continue;const zd=zm&&zm[p]>0;let cat=zd?ZT[zm[p]]:catOf(k);if(!zd&&cat==="h"&&am&&k>=0&&!pal[k].user)cat="v";if(cat==="h")continue;if(cat==="k"){S.k++;cat="v"}else if(cat==="w")cat="u";if(cat==="b"&&bx&&bx[p]&&!cm[p])cat="u";A++;SM[p]=1;const u=cm[p]||(cat==="b"&&!zd);if(u){K++;CK[p]=1;if(zd&&cat!=="b"&&!crown){S[cat]++;Kz++;if(cat==="s"||cat==="r")Kzs++}}if(u&&!crown)continue;S[cat==="b"||cat==="-"?"u":cat]++}
 SMASK=SM;CMASK=CK;draw();if(!A){$("#out").textContent="Keine Fläche erkannt. Bitte Hintergrund zuordnen.";return}
 const tot=+$("#area").value||0,uns=S.s+S.r+S.u,fm=q=>(100*q/A).toFixed(1).replace(".",",")+" %",f=q=>{const p=100*q/A;return `<div class="num">${fm(q)}</div><div class="num mu">${tot?Math.round(p*tot/100)+" m²":""}</div><div class="bar"><i style="width:${Math.min(100,p)}%"></i></div>`};
 const ucv=+$("#uc").value,und=crown?0:K-Kz,sealT=S.v+(1-ucv)*und,unsT=uns+ucv*und,rows=[["Versiegelt",sealT],["Unversiegelt (Rasen, Beete, Boden)",unsT]];
@@ -268,7 +296,7 @@ TOOLS.forEach(b=>$(b).onclick=()=>setTool($(b).classList.contains("on")?null:b))
 document.querySelectorAll(".tab").forEach(b=>b.onclick=()=>{document.querySelectorAll(".tab").forEach(t=>t.classList.toggle("on",t===b));["p1","p2","p3"].forEach(i=>$("#"+i).hidden=i!==b.dataset.p);cur=[];stTab=b.dataset.p==="p3";if(b.dataset.p==="p2")$("#zt").value="k";setTool({p1:"#mSel",p2:"#zStart",p3:"#sAdd"}[b.dataset.p]);draw()});
 const delSel=()=>{if(sel){exc(sel);circ.splice(circ.indexOf(sel),1);sel=null;summary()}};
 function fin(t){hov=null;if(cur.length<3||curT!==t)return;if(t==="area")areas.push(cur);else zones.push({t:$("#zt").value,p:cur});cur=[];buildArea();summary()}
-$("#zUndo").onclick=()=>{if(cur.length&&curT==="zone"){cur.pop()}else zones.pop();hov=null;buildArea();summary()};$("#zClr").onclick=()=>{zones=[];cur=[];hov=null;buildArea();summary()};$("#aDone").onclick=()=>fin("area");$("#zDone").onclick=()=>fin("zone");
+$("#zUndo").onclick=()=>{if(cur.length&&curT==="zone"){cur.pop()}else zones.pop();hov=null;buildArea();summary()};$("#zClr").onclick=()=>{zones=[];cur=[];hov=null;buildArea();summary()};$("#txo").onchange=()=>{stV++;summary()};$("#aDone").onclick=()=>fin("area");$("#zDone").onclick=()=>fin("zone");
 $("#sAdd").onclick=()=>setTool("#sAdd");$("#sDel").onclick=()=>setTool("#sDel");$("#sUndo").onclick=()=>{stE.pop();stV++;summary()};$("#sClr").onclick=()=>{stE=[];areas=[];autoA=null;cur=[];stV++;buildArea();summary()};
 const _dO=drawOv;drawOv=function(){_dO();if(stk&&stk.mv){const c=$("#ov"),x=c.getContext("2d");x.strokeStyle=stk.a?"rgba(37,99,235,.55)":"rgba(211,51,51,.55)";x.lineWidth=2*Math.max(3,Math.round(.012*Math.max(W,H)));x.lineCap="round";x.lineJoin="round";x.beginPath();stk.pts.forEach((q,i)=>i?x.lineTo(q[0],q[1]):x.moveTo(q[0],q[1]));x.stroke()}};
 $("#aClr").onclick=()=>{areas=[];autoA=null;cur=[];buildArea();summary()};
