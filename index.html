@@ -72,7 +72,6 @@ body[data-stage="0"] #work,body[data-stage="0"] #ev{display:none}body[data-stage
 <p class="mu">Klick ins Leere setzt einen Baum. Baum ziehen verschiebt ihn, der weiße Punkt ändert die Größe. Beim Löschen: Baum anklicken oder einen Rahmen ziehen.</p></div>
 <div class="panel" id="p2" hidden><div class="tg"><span>Flächentyp</span><select id="zt"><option value="v">Sonstiges versiegelt</option><option value="s">Büsche / Beete</option><option value="r">Rasen / Wiese</option><option value="u">Sonstiges Unversiegeltes</option><option value="k">Straße (versiegelt)</option><option value="w">Straße (unversiegelt)</option><option value="h">Außerhalb Straßenraum</option></select></div>
 <div class="tg"><span>Fläche</span><button id="wStart">Fläche anklicken</button><button id="zStart">Fläche einzeichnen</button><button id="zDone">Abschließen</button><button id="zUndo">Letzte löschen</button><button id="zClr">Alle löschen</button></div>
-<div class="tg"><span>Genauigkeit</span><label class="mu">genau <input type="range" id="wt" min="8" max="80" value="30" style="width:160px"> grob</label></div>
 <p class="mu" id="zinfo"></p><p class="mu">Typ wählen, „Fläche anklicken“ drücken, in den Plan klicken. Alles Zusammenhängende in ähnlicher Farbe bekommt den Typ.</p></div>
 <div class="panel" id="p3" hidden><p class="mu"><b>Blau = zählt als Straße</b> (Fahrbahn und Gehsteige). Innenhöfe, Gebäude und Privatgrün zählen nicht.</p>
 <div class="tg"><span>Korrigieren</span><button id="sAdd">+ Zur Straße hinzufügen</button><button id="sDel">− Aus Straße entfernen</button><button id="sUndo">Rückgängig</button><button id="sClr">Automatik wiederherstellen</button></div>
@@ -269,7 +268,7 @@ TOOLS.forEach(b=>$(b).onclick=()=>setTool($(b).classList.contains("on")?null:b))
 document.querySelectorAll(".tab").forEach(b=>b.onclick=()=>{document.querySelectorAll(".tab").forEach(t=>t.classList.toggle("on",t===b));["p1","p2","p3"].forEach(i=>$("#"+i).hidden=i!==b.dataset.p);cur=[];stTab=b.dataset.p==="p3";setTool(b.dataset.p==="p1"?"#mSel":null);draw()});
 const delSel=()=>{if(sel){exc(sel);circ.splice(circ.indexOf(sel),1);sel=null;summary()}};
 function fin(t){hov=null;if(cur.length<3||curT!==t)return;if(t==="area")areas.push(cur);else zones.push({t:$("#zt").value,p:cur});cur=[];buildArea();summary()}
-$("#aDone").onclick=()=>fin("area");$("#zDone").onclick=()=>fin("zone");
+$("#zUndo").onclick=()=>{if(cur.length&&curT==="zone"){cur.pop()}else zones.pop();hov=null;buildArea();summary()};$("#zClr").onclick=()=>{zones=[];cur=[];hov=null;buildArea();summary()};$("#aDone").onclick=()=>fin("area");$("#zDone").onclick=()=>fin("zone");
 $("#sAdd").onclick=()=>setTool("#sAdd");$("#sDel").onclick=()=>setTool("#sDel");$("#sUndo").onclick=()=>{stE.pop();stV++;summary()};$("#sClr").onclick=()=>{stE=[];areas=[];autoA=null;cur=[];stV++;buildArea();summary()};
 const _dO=drawOv;drawOv=function(){_dO();if(stk&&stk.mv){const c=$("#ov"),x=c.getContext("2d");x.strokeStyle=stk.a?"rgba(37,99,235,.55)":"rgba(211,51,51,.55)";x.lineWidth=2*Math.max(3,Math.round(.012*Math.max(W,H)));x.lineCap="round";x.lineJoin="round";x.beginPath();stk.pts.forEach((q,i)=>i?x.lineTo(q[0],q[1]):x.moveTo(q[0],q[1]));x.stroke()}};
 $("#aClr").onclick=()=>{areas=[];autoA=null;cur=[];buildArea();summary()};
@@ -284,7 +283,7 @@ if(rb){const[x0,y0]=rb,k=W/ov.getBoundingClientRect().width;if(Math.hypot(x-x0,y
 if(ds){let r=Math.hypot(x-ds[0],y-ds[1]);if(r<4)r=defR();const c={x:ds[0],y:ds[1],r,man:true};circ.push(c);sel=c;ds=null;tmp=null;summary();return}
 if(x<0||y<0||x>=W||y>=H)return;
 if(pick){const q=(Math.floor(y)*W+Math.floor(x))*4,p=[D[q],D[q+1],D[q+2]];pal.push({c:p,cat:pick==="b"?"b":guess(p),user:1});setTool();recompute();runDet()}
-else if(ed==="wand"){zones.push({t:$("#zt").value,w:[x,y,+$("#wt").value]});buildArea();summary()}
+else if(ed==="wand"){zones.push({t:$("#zt").value,w:[x,y,30]});buildArea();summary()}
 else if(ed==="area"||ed==="zone"){curT=ed;cur.push([x,y]);drawOv()}
 else if(ed==="del"){let bi=-1,bd=1e9;circ.forEach((c,i)=>{const d=Math.hypot(c.x-x,c.y-y);if(d<=c.r&&d<bd){bd=d;bi=i}});if(bi>=0){if(circ[bi]===sel)sel=null;(exc(circ[bi]),circ.splice(bi,1));summary()}}};
 $("#cx").onclick=()=>{$("#cj").value=JSON.stringify({W,circ:circ.map(c=>[Math.round(c.x),Math.round(c.y),Math.round(c.r*10)/10,c.man?1:0]),areas,zones:zones.map(z=>z.w?{t:z.t,w:z.w}:z)});$("#cj").select()};
